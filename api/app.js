@@ -16,7 +16,9 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin'; // hdd-secret-scan
 // ORIGIN_SECRET_VALUE); nothing needs switching. The header defaults to the one HDD sends. ORIGIN_LOCKDOWN=0 is only a
 // manual escape hatch (the shop is then reachable directly and is NOT protected by HDD).
 const ORIGIN_HEADER = (process.env.ORIGIN_SECRET_HEADER || 'x-hdd-origin-secret').toLowerCase();
-const ORIGIN_VALUE = process.env.ORIGIN_SECRET_VALUE || process.env.HDD_ORIGIN_SECRET || '';
+const ORIGIN_VALUE = process.env.HDD_ORIGIN_SECRET || process.env.ORIGIN_SECRET_VALUE || '';
+// Optional: where visitors of this direct address are sent so they pass through HDD (for example the HDD public URL).
+const HDD_PUBLIC_URL = (process.env.HDD_PUBLIC_URL || '').replace(/\/+$/, '');
 const LOCKDOWN = process.env.ORIGIN_LOCKDOWN !== '0' && ORIGIN_VALUE !== '';
 const hash = (p) => crypto.createHash('sha256').update('hdd-demo:' + p).digest('hex');
 
@@ -115,6 +117,14 @@ module.exports = async (req, res) => {
     res.end(html);
   };
   if (LOCKDOWN && req.headers[ORIGIN_HEADER] !== ORIGIN_VALUE) {
+    // A browser that opens the direct address is sent on to the HDD address (fixed from configuration, never from input).
+    if (HDD_PUBLIC_URL && (req.method === 'GET' || req.method === 'HEAD')) {
+      const target = String(req.url || '/').startsWith('/') ? String(req.url || '/') : '/';
+      res.statusCode = 302;
+      res.setHeader('location', HDD_PUBLIC_URL + target);
+      res.setHeader('cache-control', 'no-store');
+      return res.end();
+    }
     res.statusCode = 403;
     res.setHeader('content-type', 'text/plain; charset=utf-8');
     return res.end('This shop is protected by Hack Dev Defence (HDD).\nDirect access is refused: open it through the HDD address.\n');
