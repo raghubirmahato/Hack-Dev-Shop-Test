@@ -37,26 +37,6 @@ test('the health check also needs the secret, so the lock has no side door', asy
   assert.equal(viaHdd.status, 200);
 });
 
-test('HDD_PUBLIC_URL sends direct browsers on to the HDD address, only for GET', async () => {
-  process.env.HDD_PUBLIC_URL = 'https://shop.example.test/';
-  delete require.cache[require.resolve('../api/app')];
-  const redirecting = require('../api/app');
-  const call2 = (method, url, headers = { 'sec-fetch-dest': 'document' }) => new Promise((resolve) => {
-    const req = { method, url, headers, async *[Symbol.asyncIterator]() {} };
-    const res = { statusCode: 200, headers: {}, setHeader(k, v) { this.headers[k.toLowerCase()] = v; }, end(x) { resolve({ status: this.statusCode, headers: this.headers, text: x || '' }); } };
-    redirecting(req, res);
-  });
-  const g = await call2('GET', '/product?id=3');
-  assert.equal(g.status, 302);
-  assert.equal(g.headers.location, 'https://shop.example.test/product?id=3');
-  const evil = await call2('GET', '//evil.example/x');
-  assert.equal(evil.headers.location, 'https://shop.example.test//evil.example/x');
-  const p = await call2('POST', '/admin/login');
-  assert.equal(p.status, 403);
-  const probe = await call2('GET', '/', {});
-  assert.equal(probe.status, 403, 'a probe without a navigation header must still be refused, not redirected');
-  delete process.env.HDD_PUBLIC_URL;
-});
 test('HDD_ORIGIN_SECRET wins over the older ORIGIN_SECRET_VALUE name', async () => {
   process.env.ORIGIN_SECRET_VALUE = 'old-name-value'; // hdd-secret-scan:allow (test value)
   delete require.cache[require.resolve('../api/app')];

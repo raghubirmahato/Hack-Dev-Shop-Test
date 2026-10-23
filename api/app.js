@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const initSqlJs = require('sql.js');
 const ui = require('../lib/ui');
+const gate = require('../lib/gate');
 
 const VULN = process.env.SHOP_VULN !== '0';
 const SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
@@ -17,8 +18,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin'; // hdd-secret-scan
 // manual escape hatch (the shop is then reachable directly and is NOT protected by HDD).
 const ORIGIN_HEADER = (process.env.ORIGIN_SECRET_HEADER || 'x-hdd-origin-secret').toLowerCase();
 const ORIGIN_VALUE = process.env.HDD_ORIGIN_SECRET || process.env.ORIGIN_SECRET_VALUE || '';
-// Optional: where visitors of this direct address are sent so they pass through HDD (for example the HDD public URL).
+// Optional link on the refusal page: where visitors can open this shop through HDD (for example the HDD public URL).
 const HDD_PUBLIC_URL = (process.env.HDD_PUBLIC_URL || '').replace(/\/+$/, '');
+// Optional front-door mode: where HDD listens. When set, a request without the secret is passed to HDD instead of refused.
+const GATE = process.env.HDD_GATE_URL ? gate.parseGateUrl(process.env.HDD_GATE_URL) : null;
 const LOCKDOWN = process.env.ORIGIN_LOCKDOWN !== '0' && ORIGIN_VALUE !== '';
 const hash = (p) => crypto.createHash('sha256').update('hdd-demo:' + p).digest('hex');
 
@@ -117,14 +120,13 @@ module.exports = async (req, res) => {
     res.end(html);
   };
   if (LOCKDOWN && req.headers[ORIGIN_HEADER] !== ORIGIN_VALUE) {
-    // A person who opens the direct address in a browser (a page navigation) is sent on to the HDD address; the URL is fixed
-    // from configuration, never from input. Scripts and probes, which send no navigation header, still get the 403.
-    if (HDD_PUBLIC_URL && (req.method === 'GET' || req.method === 'HEAD') && req.headers['sec-fetch-dest'] === 'document') {
-      const target = String(req.url || '/').startsWith('/') ? String(req.url || '/') : '/';
-      res.statusCode = 302;
-      res.setHeader('location', HDD_PUBLIC_URL + target);
-      res.setHeader('cache-control', 'no-store');
-      return res.end();
+    // Not from HDD. Front-door mode hands the request to HDD (the visitor stays on this address); a request that already went
+    // through the front door once is refused instead of looping.
+    if (GATE && !req.headers['x-hdd-gate-hop']) return gate.forward(req, res, GATE);
+    const wantsHtml = String(req.headers.accept || '').includes('text/html') || req.headers['sec-fetch-dest'] === 'document';
+    if (wantsHtml && req.method === 'GET') {
+      const link = /^https?:\/\//i.test(HDD_PUBLIC_URL) ? '<p><a href="' + ui.esc(HDD_PUBLIC_URL) + '">Open the shop through HDD</a></p>' : '';
+      return gate.refuse(res, 403, 'Open this shop through HDD', 'Direct access is refused: this shop only answers requests that Hack Dev Defence has inspected.', link);
     }
     res.statusCode = 403;
     res.setHeader('content-type', 'text/plain; charset=utf-8');
