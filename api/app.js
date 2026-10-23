@@ -221,3 +221,20 @@ module.exports = async (req, res) => {
   }
 };
 module.exports.hash = hash;
+
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+const SECRET = process.env.HDD_ORIGIN_SECRET ?? "";
+const HEADER = "X-HDD-Origin-Secret";
+
+export function middleware(request: NextRequest): NextResponse {
+  const supplied = request.headers.get(HEADER) ?? "";
+  if (SECRET.length === 0 || supplied !== SECRET) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+  return NextResponse.next();
+}
+
+export const config = { matcher: "/:path*" };
+
