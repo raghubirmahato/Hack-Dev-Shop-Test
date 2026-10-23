@@ -11,10 +11,13 @@ const ui = require('../lib/ui');
 const VULN = process.env.SHOP_VULN !== '0';
 const SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin'; // hdd-secret-scan:allow (lab demo credential, fake data)
-const ORIGIN_HEADER = (process.env.ORIGIN_SECRET_HEADER || '').toLowerCase();
-const ORIGIN_VALUE = process.env.ORIGIN_SECRET_VALUE || '';
-// ORIGIN_LOCKDOWN=0 turns the origin lockdown off (the shop is then reachable directly, so it is NOT protected by HDD).
-const LOCKDOWN = process.env.ORIGIN_LOCKDOWN !== '0';
+// Origin lock (automatic): the shop refuses any request that does not carry HDD's secret header, so it can only be
+// reached through the HDD proxy. The lock turns itself on as soon as a secret is configured (HDD_ORIGIN_SECRET, or
+// ORIGIN_SECRET_VALUE); nothing needs switching. The header defaults to the one HDD sends. ORIGIN_LOCKDOWN=0 is only a
+// manual escape hatch (the shop is then reachable directly and is NOT protected by HDD).
+const ORIGIN_HEADER = (process.env.ORIGIN_SECRET_HEADER || 'x-hdd-origin-secret').toLowerCase();
+const ORIGIN_VALUE = process.env.ORIGIN_SECRET_VALUE || process.env.HDD_ORIGIN_SECRET || '';
+const LOCKDOWN = process.env.ORIGIN_LOCKDOWN !== '0' && ORIGIN_VALUE !== '';
 const hash = (p) => crypto.createHash('sha256').update('hdd-demo:' + p).digest('hex');
 
 const PRODUCTS = [
@@ -111,8 +114,10 @@ module.exports = async (req, res) => {
     Object.entries(extra).forEach(([k, v]) => res.setHeader(k, v));
     res.end(html);
   };
-  if (LOCKDOWN && ORIGIN_HEADER && req.headers[ORIGIN_HEADER] !== ORIGIN_VALUE) {
-    res.statusCode = 403; res.setHeader('content-type', 'text/plain'); return res.end('direct origin access refused\n');
+  if (LOCKDOWN && req.headers[ORIGIN_HEADER] !== ORIGIN_VALUE) {
+    res.statusCode = 403;
+    res.setHeader('content-type', 'text/plain; charset=utf-8');
+    return res.end('This shop is protected by Hack Dev Defence (HDD).\nDirect access is refused: open it through the HDD address.\n');
   }
   try {
     const url = new URL(req.url, 'http://x');

@@ -28,7 +28,9 @@ npm run dev        # http://127.0.0.1:8082
 | `ADMIN_PASSWORD` | Admin password (default `admin`, lab only). |
 | `SESSION_SECRET` | Key used to sign the admin session cookie. Set a random value on Vercel. |
 | `SHOP_VULN` | Set to `0` to switch the login to a parameterised (fixed) query. |
-| `ORIGIN_SECRET_HEADER`, `ORIGIN_SECRET_VALUE`, `ORIGIN_LOCKDOWN` | Origin lockdown: when `ORIGIN_LOCKDOWN` is not `0`, requests without the secret header are refused with a 403, so only the HDD proxy can reach the shop. |
+| `HDD_ORIGIN_SECRET` (or `ORIGIN_SECRET_VALUE`) | The secret HDD sends in the `X-HDD-Origin-Secret` header. **The origin lock turns itself on whenever this is set**: a request without the right header is refused with a 403, so the shop can only be reached through the HDD proxy. Nothing to switch on or off. |
+| `ORIGIN_SECRET_HEADER` | Header name (default `X-HDD-Origin-Secret`, matching HDD). |
+| `ORIGIN_LOCKDOWN` | `0` is a manual escape hatch that turns the lock off (the shop is then reachable directly and is not protected). |
 
 ## Deploying
 
