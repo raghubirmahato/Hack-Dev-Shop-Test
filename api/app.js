@@ -117,8 +117,9 @@ module.exports = async (req, res) => {
     res.end(html);
   };
   if (LOCKDOWN && req.headers[ORIGIN_HEADER] !== ORIGIN_VALUE) {
-    // A browser that opens the direct address is sent on to the HDD address (fixed from configuration, never from input).
-    if (HDD_PUBLIC_URL && (req.method === 'GET' || req.method === 'HEAD')) {
+    // A person who opens the direct address in a browser (a page navigation) is sent on to the HDD address; the URL is fixed
+    // from configuration, never from input. Scripts and probes, which send no navigation header, still get the 403.
+    if (HDD_PUBLIC_URL && (req.method === 'GET' || req.method === 'HEAD') && req.headers['sec-fetch-dest'] === 'document') {
       const target = String(req.url || '/').startsWith('/') ? String(req.url || '/') : '/';
       res.statusCode = 302;
       res.setHeader('location', HDD_PUBLIC_URL + target);
