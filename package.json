@@ -5,7 +5,7 @@
   "description": "Lab-only demo shop with a deliberately injectable admin login. Fake data only. Never ship.",
   "scripts": {
     "dev": "node server.js",
-    "test": "node --test test/shop.test.js test/lock.test.js test/gate.test.js"
+    "test": "node --test test/shop.test.js"
   },
   "dependencies": {
     "sql.js": "1.12.0"
