@@ -95,3 +95,20 @@ test('without front-door mode a browser gets a readable 403 page (with a link wh
   assert.doesNotMatch(script.text, /<html|<main/);
   delete process.env.HDD_PUBLIC_URL;
 });
+
+test('a GET is retried when the first connection to HDD is reset; a POST on a fresh connection is not replayed', async () => {
+  let hits = 0;
+  const hdd = await stubHdd((req, res) => { hits += 1; if (hits === 1) { req.socket.destroy(); return; } res.end('from-hdd'); });
+  const app = load({ HDD_GATE_URL: hdd.url });
+  const g = await call(app, 'GET', '/', { headers: { host: 'shop.example.test' } });
+  assert.equal(g.status, 200);
+  assert.equal(g.text, 'from-hdd');
+  assert.equal(hits, 2, 'one reset, one retry');
+  hits = 0;
+  const reset = await stubHdd((req, res) => { hits += 1; req.socket.destroy(); });
+  const app2 = load({ HDD_GATE_URL: reset.url });
+  const p = await call(app2, 'POST', '/admin/login', { headers: { host: 'shop.example.test', 'content-type': 'application/x-www-form-urlencoded' }, body: 'a=b' });
+  assert.equal(p.status, 503);
+  assert.equal(hits, 1, 'a POST that may have reached HDD is never sent twice');
+  hdd.srv.close(); reset.srv.close();
+});
