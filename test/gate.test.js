@@ -48,7 +48,8 @@ test('a request without the secret is passed to HDD with its own host, method, b
   assert.equal(s.method, 'POST');
   assert.equal(s.url, '/admin/login?x=1');
   assert.equal(s.body, 'username=a&password=b');
-  assert.equal(s.headers.host, 'shop.example.test');
+  assert.equal(s.headers.host, new URL(hdd.url).host, 'the Host names HDD so a tunnel or router in front of it can route');
+  assert.equal(s.headers['x-forwarded-host'], 'shop.example.test');
   assert.equal(s.headers['x-forwarded-for'], '203.0.113.9');
   assert.equal(s.headers['x-hdd-gate-hop'], '1');
   assert.equal(s.headers['x-hdd-origin-secret'], undefined, 'a client-supplied secret header is never forwarded');
