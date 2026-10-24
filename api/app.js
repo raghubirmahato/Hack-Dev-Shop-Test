@@ -261,6 +261,8 @@ module.exports.hash = hash;
   const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 16 });
   const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 16 });
   const ATTEMPTS = 5;
+  // Errors that prove the connection was never made (so HDD never saw the request): a POST may safely be tried again.
+  const CONNECTION_ERRORS = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"]);
   const MAX_BODY = 1024 * 1024;
   const TIMEOUT_MS = 20000;
 
@@ -354,6 +356,8 @@ module.exports.hash = hash;
     if (req.headers.host) headers["x-forwarded-host"] = req.headers.host;
     headers["accept-encoding"] = "identity";
     headers["x-hdd-gate-hop"] = "1";
+    // A fresh connection per request: a tunnel in front of HDD drops idle sockets, and a reused dead socket resets the first request.
+    headers.connection = "close";
     headers["x-forwarded-proto"] = "https";
     if (client) headers["x-forwarded-for"] = client;
     if (body.length) headers["content-length"] = String(body.length);
@@ -388,7 +392,7 @@ module.exports.hash = hash;
       out.on("error", (error) => {
         console.error("front door: HDD request failed (attempt " + number + "):", error && (error.code || error.message));
         if (res.headersSent) { res.destroy(); return done("ok"); }
-        done(number < ATTEMPTS && (replayable || out.reusedSocket) ? "retry" : "fail");
+        done(number < ATTEMPTS && (replayable || out.reusedSocket || CONNECTION_ERRORS.has(error && error.code)) ? "retry" : "fail");
       });
       out.end(body);
     });
