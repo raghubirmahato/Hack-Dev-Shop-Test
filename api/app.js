@@ -115,6 +115,10 @@ module.exports = async (req, res) => {
     res.statusCode = code;
     res.setHeader('content-type', 'text/html; charset=utf-8');
     res.setHeader('x-content-type-options', 'nosniff');
+    // The shop is dynamic (cart, admin session): no browser or shared cache may keep a copy of any page.
+    res.setHeader('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.setHeader('pragma', 'no-cache');
+    res.setHeader('expires', '0');
     Object.entries(extra).forEach(([k, v]) => res.setHeader(k, v));
     res.end(html);
   };
@@ -124,7 +128,7 @@ module.exports = async (req, res) => {
     const d = await db();
     const cart = parseCart(req.headers.cookie);
     const cartCount = cart.reduce((a, x) => a + x[1], 0);
-    if (p === '/healthz') { res.setHeader('content-type', 'application/json'); return res.end('{"ok":true}'); }
+    if (p === '/healthz') { res.setHeader('content-type', 'application/json'); res.setHeader('cache-control', 'no-store'); return res.end('{"ok":true}'); }
 
     if (p === '/' && req.method === 'GET') {
       const q = (url.searchParams.get('q') || '').slice(0, 80);
