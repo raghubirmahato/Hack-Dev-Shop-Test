@@ -227,14 +227,17 @@ module.exports.hash = hash;
 // carries HDD's secret header reaches the app unchanged, and every other request is forwarded to
 // HDD first (HDD_GATE_URL) so HDD's Off / Monitor / Block decision applies before the app runs.
 // The visitor keeps using this address. If HDD cannot be reached the request is refused with 503,
-// never served uninspected. While HDD_ORIGIN_SECRET is empty or unset the front door is OFF and the
-// app answers everyone (not protected). Nothing else in the file changes.
+// never served uninspected, unless you set HDD_FAIL_OPEN=1: then the app answers directly while HDD is
+// unreachable or HDD_GATE_URL is not set (the site stays usable, but those requests are NOT inspected).
+// While HDD_ORIGIN_SECRET is empty or unset the front door is OFF and the app answers everyone (not
+// protected). Nothing else in the file changes.
 (function hddFrontDoor() {
   const crypto = require("crypto");
   const http = require("http");
   const https = require("https");
 
   const SECRET = process.env.HDD_ORIGIN_SECRET || "";
+  const FAIL_OPEN = /^(1|true|yes)$/i.test(process.env.HDD_FAIL_OPEN || "");
   const HOP = new Set([
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer",
     "transfer-encoding", "upgrade", "host", "content-length", "x-forwarded-for",
@@ -290,7 +293,7 @@ module.exports.hash = hash;
     return Buffer.concat(chunks);
   }
 
-  async function forward(req, res, target) {
+  async function forward(req, res, target, serveDirectly) {
     let body;
     try { body = await readBody(req); } catch (error) {
       return refuse(res, error.code === "TOO_LARGE" ? 413 : 400, "Request refused", "The request could not be read.");
@@ -340,7 +343,14 @@ module.exports.hash = hash;
       if (outcome === "fail") break;
       await new Promise((resolveWait) => setTimeout(resolveWait, 300 * number));
     }
-    if (!res.headersSent) refuse(res, 503, "Protection is unavailable", "This site only answers through Hack Dev Defence, and HDD could not be reached. The request was not served. Try again shortly.");
+    if (res.headersSent) return;
+    if (FAIL_OPEN) {
+      // Opt-in: keep the site usable while HDD is unreachable. The body was already read, so hand it back to the app.
+      console.error("front door: HDD unreachable, serving the request directly (HDD_FAIL_OPEN is on, NOT inspected)");
+      req[Symbol.asyncIterator] = async function* replayBody() { yield body; };
+      return serveDirectly();
+    }
+    refuse(res, 503, "Protection is unavailable", "This site only answers through Hack Dev Defence, and HDD could not be reached. The request was not served. Try again shortly.");
   }
 
   const handler = module.exports;
@@ -350,7 +360,8 @@ module.exports.hash = hash;
   const wrapped = async function (req, res) {
     if (SECRET.length === 0) return handler.apply(this, arguments);
     if (fromHdd(req)) return handler.apply(this, arguments);
-    if (gateUrl && !req.headers["x-hdd-gate-hop"]) return forward(req, res, gateUrl);
+    if (gateUrl && !req.headers["x-hdd-gate-hop"]) return forward(req, res, gateUrl, () => handler.apply(this, arguments));
+    if (FAIL_OPEN) return handler.apply(this, arguments);
     res.statusCode = 403;
     res.setHeader("content-type", "text/plain; charset=utf-8");
     return res.end("Forbidden: this site only answers through Hack Dev Defence (HDD).");
