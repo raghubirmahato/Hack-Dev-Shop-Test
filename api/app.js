@@ -83,7 +83,17 @@ async function readBody(req) {
   for await (const c of req) { n += c.length; if (n > 65536) throw new Error('body too large'); chunks.push(c); }
   return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8')));
 }
-const rows = (d, sql, p) => { const r = d.exec(sql, p); return r.length ? r[0].values.map((v) => Object.fromEntries(r[0].columns.map((c, i) => [c, v[i]]))) : []; };
+// One statement per query, like most database drivers: sql.js `prepare` compiles only the first statement, so a stacked
+// payload (`'; DROP TABLE users--`) cannot change or destroy the demo data. Tautology and UNION injection still work.
+const rows = (d, sql, p) => {
+  const st = d.prepare(sql);
+  try {
+    if (p) st.bind(p);
+    const out = [];
+    while (st.step()) out.push(st.getAsObject());
+    return out;
+  } finally { st.free(); }
+};
 
 function login(d, user, pass) {
   if (VULN) {
