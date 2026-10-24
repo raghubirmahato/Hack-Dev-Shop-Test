@@ -260,7 +260,7 @@ module.exports.hash = hash;
   ]);
   const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 16 });
   const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 16 });
-  const ATTEMPTS = 5;
+  const ATTEMPTS = 6;
   // Errors that prove the connection was never made (so HDD never saw the request): a POST may safely be tried again.
   const CONNECTION_ERRORS = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"]);
   const MAX_BODY = 1024 * 1024;
@@ -400,7 +400,7 @@ module.exports.hash = hash;
       const outcome = await attempt(number);
       if (outcome === "ok") return;
       if (outcome === "fail") break;
-      await new Promise((resolveWait) => setTimeout(resolveWait, 300 * number));
+      await new Promise((resolveWait) => setTimeout(resolveWait, 800 * number));
       if (gateFrom) { discovered.at = 0; target = (await currentGate()) || target; } // the address may have moved
     }
     discovered.at = 0; // the address may have changed: read it again on the next request
