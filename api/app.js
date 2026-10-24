@@ -323,6 +323,13 @@ module.exports.hash = hash;
         protocol: destination.protocol, hostname: destination.hostname, port: destination.port,
         path: destination.pathname + destination.search, method: req.method, headers, timeout: TIMEOUT_MS, agent,
       }, (back) => {
+        // Every answer from HDD carries a Ray ID. A 502/503/504 without one came from something in front of HDD (for example
+        // a tunnel with no HDD behind it), so HDD was not reached: treat it like a connection failure.
+        if (!back.headers["hdd-ray-id"] && (back.statusCode === 502 || back.statusCode === 503 || back.statusCode === 504)) {
+          back.resume();
+          console.error("front door: answer without a Ray ID (HDD not reached), status " + back.statusCode + " (attempt " + number + ")");
+          return done(number < ATTEMPTS ? "retry" : "fail");
+        }
         res.statusCode = back.statusCode || 502;
         for (const [name, value] of Object.entries(back.headers)) if (!HOP.has(name.toLowerCase())) res.setHeader(name, value);
         back.on("end", () => done("ok"));
@@ -369,4 +376,3 @@ module.exports.hash = hash;
   Object.assign(wrapped, handler);
   module.exports = wrapped;
 })();
-
